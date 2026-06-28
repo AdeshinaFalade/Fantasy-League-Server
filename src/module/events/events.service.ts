@@ -3,10 +3,14 @@ import { PrismaService } from '../../lib/database/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { ResultEventDto } from './dto/result-event.dto';
 import { EventStatusDto } from './dto/update-event-status.dto';
+import { ResultsService } from '../results/results.service';
 
 @Injectable()
 export class EventsService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly resultsService: ResultsService,
+    ) { }
 
     async create(userId: string, dto: CreateEventDto) {
         const prisma = this.prisma as never as {
@@ -38,13 +42,6 @@ export class EventsService {
     }
 
     async recordResult(userId: string, dto: ResultEventDto) {
-        const prisma = this.prisma as never as { result: { create(args: unknown): Promise<unknown> } };
-        return prisma.result.create({
-            data: {
-                eventId: dto.eventId,
-                recordedById: userId,
-                payload: dto.payload,
-            },
-        });
+        return this.resultsService.recordResult(userId, dto);
     }
 }

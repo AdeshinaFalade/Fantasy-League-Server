@@ -1,14 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../lib/database/prisma.service';
+import { KafkaService } from '../../lib/kafka/kafka.service';
+import { KAFKA_TOPICS } from '../../lib/kafka/kafka.constants';
 import { CreatePredictionDto } from './dto/create-prediction.dto';
 
 @Injectable()
 export class PredictionsService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly kafka: KafkaService,
+    ) { }
 
     async create(userId: string, dto: CreatePredictionDto) {
         const prisma = this.prisma as never as {
-            prediction: { create(args: unknown): Promise<unknown>; findMany(args: unknown): Promise<unknown[]> };
+            prediction: { create(args: unknown): Promise<any>; findMany(args: unknown): Promise<unknown[]> };
             groupMember: { findUnique(args: unknown): Promise<unknown | null> };
             event: { findUnique(args: unknown): Promise<{ status: string } | null> };
         };
@@ -23,7 +28,7 @@ export class PredictionsService {
             throw new Error('User does not belong to the group');
         }
 
-        return prisma.prediction.create({
+        const prediction = await prisma.prediction.create({
             data: {
                 eventId: dto.eventId,
                 groupId: dto.groupId,
@@ -31,6 +36,22 @@ export class PredictionsService {
                 selections: dto.selections,
             },
         });
+
+        // Publish event to Kafka
+        await this.kafka.publish(
+            KAFKA_TOPICS.predictionSubmitted,
+            prediction.id,
+            {
+                id: prediction.id,
+                eventId: prediction.eventId,
+                groupId: prediction.groupId,
+                userId: prediction.userId,
+                selections: prediction.selections,
+                submittedAt: prediction.submittedAt || new Date(),
+            }
+        );
+
+        return prediction;
     }
 
     async listByEvent(eventId: string) {

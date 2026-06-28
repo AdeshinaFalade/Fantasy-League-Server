@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthModule as BetterAuthNestModule } from '@thallesp/nestjs-better-auth';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -17,6 +18,7 @@ import { PredictionsModule } from './module/predictions/predictions.module';
 import { ResultsModule } from './module/results/results.module';
 import { LeaderboardModule } from './module/leaderboard/leaderboard.module';
 import { ScoringModule } from './module/scoring/scoring.module';
+import { GroupRoleGuard } from './common/guards/group-role.guard';
 
 @Module({
   imports: [
@@ -51,6 +53,12 @@ import { ScoringModule } from './module/scoring/scoring.module';
     ScoringModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: GroupRoleGuard,
+    },
+  ],
 })
 export class AppModule { }

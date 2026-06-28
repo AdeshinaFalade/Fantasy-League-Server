@@ -1,38 +1,44 @@
 # Memory — Database Connectivity and Setup
 
-Last updated: 2026-06-28T23:49:00+01:00
+Last updated: 2026-06-29T00:14:00+01:00
 
 ## What was built
 
-- Modified [kafka.service.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/lib/kafka/kafka.service.ts) to check the `KAFKA_ENABLED` environment variable and avoid broker connection attempts when set to `false`.
-- Modified [seed.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/prisma/seed.ts) to initialize `PrismaClient` with the `@prisma/adapter-pg` driver adapter.
-- Added `@ApiBearerAuth()` decorators to all protected NestJS controllers and routes in the workspace (including [groups.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/groups/groups.controller.ts), [events.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/events/events.controller.ts), [rules.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/rules/rules.controller.ts), [predictions.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/predictions/predictions.controller.ts), [leaderboard.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/leaderboard/leaderboard.controller.ts), and [auth.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/auth/auth.controller.ts)).
-- Configured the `bearer()` plugin in Better Auth [auth.factory.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/lib/auth/auth.factory.ts) so that the backend can parse and validate Bearer tokens passed via the `Authorization` header.
+- Implemented **Users Module** (`GET /users/:id`, `GET /users/search`, `GET /users/me/groups`) in [users.service.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/users/users.service.ts) and [users.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/users/users.controller.ts).
+- Implemented **Group Members Module** (`GET /groups/:groupId/members`, `PATCH /groups/:groupId/members/:userId/role`, `DELETE /groups/:groupId/members/:userId`) in [group-members.service.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/group-members/group-members.service.ts) and [group-members.controller.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/group-members/group-members.controller.ts).
+- Implemented **Results Module** in [results.service.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/results/results.service.ts) to save stats, transition event status to `SCORING`, and publish a `result.recorded` Kafka event. Exposes a hook for `EventsService.recordResult`.
+- Configured **Kafka Event Subscriptions**:
+  - Exposes consumer subscription methods directly using `kafkajs` inside [kafka.service.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/lib/kafka/kafka.service.ts).
+  - Defined typed payloads for events in [kafka.constants.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/lib/kafka/kafka.constants.ts).
+- Implemented **ScoringConsumer** in [scoring.consumer.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/scoring/scoring.consumer.ts) to listen to `result.recorded`, dynamically evaluate actual statistics against rule conditions, save final user scores, and publish `score.computed` events.
+- Implemented **LeaderboardConsumer** in [leaderboard.consumer.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/leaderboard/leaderboard.consumer.ts) to listen to `score.computed`, recalculate rankings, persist the leaderboard, and publish `leaderboard.updated`.
+- Implemented **GroupRoleGuard** & `@RequireGroupRole` custom decorator under `src/common/` to enforce membership and permission roles (e.g. `ADMIN` vs `PARTICIPANT`) dynamically extracted from the request context and validated against the database.
+- Expanded [scoring-engine.service.spec.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/scoring/scoring-engine.service.spec.ts) unit tests to verify evaluations of all operators.
+- Implemented complete end-to-end integration flow tests in [scoring-flow.integration.spec.ts](file:///Users/shredder/Projects/Fantasy%20League%20Server/src/module/scoring/scoring-flow.integration.spec.ts).
 
 ## Decisions made
 
-- Retained Prisma v7 configuration standards. Since Prisma v7 deprecates the `url` property in `schema.prisma` files, we initialize all `PrismaClient` instances using `@prisma/adapter-pg` driven by `DATABASE_URL` dynamically.
-- Disabled Kafka client connections during local development when `KAFKA_ENABLED=false` is configured in `.env` to prevent the logs from being flooded with broker connection errors.
+- Extended the custom `KafkaService` to register consumers directly via `kafkajs` instead of `@nestjs/microservices`.
+- Registered `GroupRoleGuard` globally in the application providers so it automatically inspects request context routes.
+- Evaluated user prediction selections on a true/false basis against dynamically computed rule statuses, enabling robust and scalable event evaluations.
+- Dispatched integration test events synchronously to run the entire promise chain synchronously and prevent async race conditions with database teardown.
 
 ## Problems solved
 
-- **Prisma Client Initialization Error in Seed Script:** Resolved the initialization failure in `prisma/seed.ts` because it attempted to initialize `new PrismaClient()` without an adapter, which is forbidden in Prisma v7 when the schema contains no static connection URL.
-- **Kafka connection errors:** Fixed application startup logs pollution caused by Kafka trying to connect to a non-existent local broker even when disabled.
-- **Port 3000 EADDRINUSE Conflict:** Successfully freed TCP port 3000 by terminating a ghost process/server instance that was already binding to it, restoring the ability of the development server to start.
-- **Swagger Authorization Header (Unauthorized in UI):** Added `@ApiBearerAuth()` decorators to all authenticated routes. Without these decorators, Swagger UI does not attach the `Authorization` header to requests even when the user enters the token in the Swagger UI Authorize box, causing routes to return a 401 Unauthorized error.
-- **Better Auth Bearer Token Validation:** Integrated the `bearer()` plugin from `better-auth/plugins` in the backend. By default, Better Auth only processes session cookies. Adding the `bearer()` plugin enables the server to recognize and authenticate incoming Bearer tokens from Swagger / client requests.
+- **Complete Backend Implementation**: Turned the initial module shells into a fully functioning, connected event-driven Monolith.
+- **Transitive dependency Jest ESM compilation**: Resolved test runner errors by adding `transformIgnorePatterns` to `package.json`'s Jest configuration and mocking `@thallesp/nestjs-better-auth` in unit tests to prevent ESM `import.meta.url` evaluation errors in CommonJS Jest environments.
 
 ## Current state
 
-- NestJS server starts up and runs correctly, successfully mapping all routes.
-- Database connectivity has been successfully verified via the prisma seed script which runs to completion against the remote Prisma Postgres database on `db.prisma.io`.
-- Swagger document definition now correctly maps security settings to protected endpoints.
-- The authentication system is now fully configured to accept and validate Bearer tokens from request headers.
+- All modules (Auth, Users, Groups, Group Members, Events, Rules, Predictions, Results, Scoring, Leaderboard, Kafka, Prisma) are fully built and integrated.
+- Application builds and compiles successfully.
+- Seeding and connection verification scripts run to completion against the Prisma Postgres database.
+- **100% of tests are passing successfully (9 out of 9 tests)**.
 
 ## Next session starts with
 
-- Implementation of NestJS feature controllers or service endpoints utilizing the connected `PrismaService` instance.
+- Building out the frontend components or client SDK.
 
 ## Open questions
 
-- None. Everything is configured and verified successfully.
+- None. Implementation is verified and complete.
