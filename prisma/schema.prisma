@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum GroupRole {
+  ADMIN
+  PARTICIPANT
+}
+
+enum EventStatus {
+  OPEN
+  CLOSED
+  SCORING
+  COMPLETED
+}
+
+enum RuleCondition {
+  GT
+  LT
+  EQ
+  GTE
+  LTE
+  NEQ
+}
+
+enum PredictionStatus {
+  SUBMITTED
+  SCORED
+  REJECTED
+}
+
+model User {
+  id               String        @id @default(cuid())
+  email            String        @unique
+  name             String
+  image            String?
+  emailVerified    Boolean       @default(false)
+  role             String        @default("USER")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  accounts         Account[]
+  sessions         Session[]
+  groupMemberships GroupMember[]
+  createdGroups    Group[]       @relation("GroupCreator")
+  createdEvents    Event[]       @relation("EventCreator")
+  createdRules     Rule[]
+  recordedResults  Result[]      @relation("ResultCreator")
+  predictions      Prediction[]
+  scores           Score[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, providerId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Group {
+  id          String        @id @default(cuid())
+  name        String
+  inviteCode  String        @unique
+  settings    Json          @default("{}")
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   User          @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members     GroupMember[]
+  events      Event[]
+  predictions Prediction[]
+  scores      Score[]
+  leaderboard Leaderboard?
+
+  @@index([createdById])
+}
+
+model GroupMember {
+  id          String    @id @default(cuid())
+  groupId     String
+  userId      String
+  role        GroupRole @default(PARTICIPANT)
+  permissions Json      @default("{}")
+  joinedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+model Event {
+  id          String       @id @default(cuid())
+  groupId     String
+  createdById String
+  name        String
+  description String?
+  status      EventStatus  @default(OPEN)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  metadata    Json         @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User         @relation("EventCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  rules       Rule[]
+  predictions Prediction[]
+  results     Result[]
+  scores      Score[]
+
+  @@index([groupId, status])
+  @@index([createdById])
+}
+
+model Rule {
+  id          String        @id @default(cuid())
+  eventId     String
+  createdById String
+  player      String
+  metric      String
+  condition   RuleCondition
+  threshold   Decimal       @db.Decimal(12, 4)
+  score       Int
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  event       Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy   User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+}
+
+model Prediction {
+  id          String           @id @default(cuid())
+  eventId     String
+  groupId     String
+  userId      String
+  selections  Json
+  status      PredictionStatus @default(SUBMITTED)
+  submittedAt DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scores      Score[]
+
+  @@unique([eventId, groupId, userId])
+  @@index([eventId])
+  @@index([groupId])
+  @@index([userId])
+}
+
+model Result {
+  id           String   @id @default(cuid())
+  eventId      String   @unique
+  payload      Json
+  recordedById String
+  recordedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  recordedBy   User     @relation("ResultCreator", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([recordedById])
+}
+
+model Score {
+  id           String     @id @default(cuid())
+  eventId      String
+  groupId      String
+  userId       String
+  predictionId String
+  value        Int
+  computedAt   DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  event        Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prediction   Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, groupId, userId])
+  @@index([groupId, value])
+  @@index([eventId])
+}
+
+model Leaderboard {
+  id         String   @id @default(cuid())
+  groupId    String   @unique
+  rankings   Json     @default("[]")
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
