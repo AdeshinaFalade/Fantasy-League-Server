@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../lib/database/prisma.service';
 import { KafkaService } from '../../lib/kafka/kafka.service';
 import { KAFKA_TOPICS } from '../../lib/kafka/kafka.constants';
@@ -18,6 +18,29 @@ export class ResultsService {
         });
         if (existingResult) {
             throw new ConflictException('Result already recorded for this event');
+        }
+
+        // Validate the payload covers every player+metric in the event's rules
+        const rules = await (this.prisma as any).rule.findMany({
+            where: { eventId: dto.eventId },
+            select: { player: true, metric: true },
+        });
+        if (rules.length === 0) {
+            throw new BadRequestException('No rules found for this event');
+        }
+
+        const payload = dto.payload as Record<string, Record<string, unknown>>;
+        const missing: string[] = [];
+        for (const rule of rules as { player: string; metric: string }[]) {
+            const playerStats = payload[rule.player];
+            if (!playerStats || playerStats[rule.metric] === undefined) {
+                missing.push(`${rule.player}.${rule.metric}`);
+            }
+        }
+        if (missing.length > 0) {
+            throw new BadRequestException(
+                `Payload is missing stats for: ${missing.join(', ')}`,
+            );
         }
 
         // Create the result and update event status to SCORING inside a transaction
@@ -54,3 +77,4 @@ export class ResultsService {
         return result;
     }
 }
+

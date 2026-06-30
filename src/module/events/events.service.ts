@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../lib/database/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { ResultEventDto } from './dto/result-event.dto';
@@ -28,7 +28,13 @@ export class EventsService {
         });
     }
 
-    async findByGroup(groupId: string) {
+    async findByGroup(userId: string, groupId: string) {
+        const membership = await (this.prisma as any).groupMember.findUnique({
+            where: { groupId_userId: { groupId, userId } },
+        });
+        if (!membership) {
+            throw new ForbiddenException('You are not a member of this group');
+        }
         const prisma = this.prisma as never as { event: { findMany(args: unknown): Promise<unknown[]> } };
         return prisma.event.findMany({ where: { groupId } });
     }

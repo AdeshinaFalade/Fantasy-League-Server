@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../lib/database/prisma.service';
 import { KafkaService } from '../../lib/kafka/kafka.service';
 import { KAFKA_TOPICS } from '../../lib/kafka/kafka.constants';
@@ -20,16 +20,31 @@ export class PredictionsService {
 
         const event = await prisma.event.findUnique({ where: { id: dto.eventId } });
         if (!event || event.status !== 'OPEN') {
-            throw new Error('Event is not open');
+            throw new BadRequestException('Event is not open');
         }
 
         if (event.startsAt && new Date() > new Date(event.startsAt)) {
-            throw new Error('Event has already started');
+            throw new BadRequestException('Event has already started');
         }
 
         const membership = await prisma.groupMember.findUnique({ where: { groupId_userId: { groupId: dto.groupId, userId } } });
         if (!membership) {
-            throw new Error('User does not belong to the group');
+            throw new ForbiddenException('User does not belong to the group');
+        }
+
+        // Validate that all ruleIds belong to this event
+        const rules = await (this.prisma as any).rule.findMany({
+            where: { eventId: dto.eventId },
+            select: { id: true },
+        });
+        const validRuleIds = new Set<string>(rules.map((r: { id: string }) => r.id));
+        const invalidIds = dto.selections
+            .map((s) => s.ruleId)
+            .filter((id) => !validRuleIds.has(id));
+        if (invalidIds.length > 0) {
+            throw new BadRequestException(
+                `Invalid ruleId(s) for this event: ${invalidIds.join(', ')}`,
+            );
         }
 
         const prediction = await prisma.prediction.create({

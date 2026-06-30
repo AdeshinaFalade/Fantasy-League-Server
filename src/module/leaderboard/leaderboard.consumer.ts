@@ -12,8 +12,8 @@ export class LeaderboardConsumer implements OnModuleInit {
         private readonly kafka: KafkaService,
     ) {}
 
-    async onModuleInit() {
-        await this.kafka.subscribe(
+    onModuleInit() {
+        this.kafka.subscribe(
             KAFKA_TOPICS.scoreComputed,
             async (event: ScoreComputedEvent) => {
                 try {

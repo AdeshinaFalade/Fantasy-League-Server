@@ -4,7 +4,7 @@ import { PrismaService } from '../../lib/database/prisma.service';
 
 @Injectable()
 export class GroupMembersService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) { }
 
     async updateRole(groupId: string, userId: string, role: GroupRole) {
         const membership = await (this.prisma as any).groupMember.findUnique({

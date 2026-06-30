@@ -1,8 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Session } from '@thallesp/nestjs-better-auth';
-import { GroupRole } from '@prisma/client';
-import { RequireGroupRole } from '../../common/decorators/group-role.decorator';
 import { CreateEventDto } from './dto/create-event.dto';
 import { ResultEventDto } from './dto/result-event.dto';
 import { UpdateEventStatusDto } from './dto/update-event-status.dto';
@@ -21,10 +19,12 @@ export class EventsController {
     }
 
     @Get('group/:groupId')
-    @RequireGroupRole(GroupRole.PARTICIPANT)
     @ApiOkResponse()
-    findByGroup(@Param('groupId') groupId: string) {
-        return this.eventsService.findByGroup(groupId);
+    findByGroup(
+        @Session() session: { user?: { id?: string } },
+        @Param('groupId') groupId: string,
+    ) {
+        return this.eventsService.findByGroup(session.user?.id ?? '', groupId);
     }
 
     @Get(':id')

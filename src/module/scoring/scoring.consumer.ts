@@ -14,8 +14,8 @@ export class ScoringConsumer implements OnModuleInit {
         private readonly scoringEngine: ScoringEngineService,
     ) {}
 
-    async onModuleInit() {
-        await this.kafka.subscribe(
+    onModuleInit() {
+        this.kafka.subscribe(
             KAFKA_TOPICS.resultRecorded,
             async (event: ResultRecordedEvent) => {
                 try {
