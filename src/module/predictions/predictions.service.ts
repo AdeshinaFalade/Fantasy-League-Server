@@ -15,12 +15,16 @@ export class PredictionsService {
         const prisma = this.prisma as never as {
             prediction: { create(args: unknown): Promise<any>; findMany(args: unknown): Promise<unknown[]> };
             groupMember: { findUnique(args: unknown): Promise<unknown | null> };
-            event: { findUnique(args: unknown): Promise<{ status: string } | null> };
+            event: { findUnique(args: unknown): Promise<{ status: string; startsAt?: Date | string | null } | null> };
         };
 
         const event = await prisma.event.findUnique({ where: { id: dto.eventId } });
         if (!event || event.status !== 'OPEN') {
             throw new Error('Event is not open');
+        }
+
+        if (event.startsAt && new Date() > new Date(event.startsAt)) {
+            throw new Error('Event has already started');
         }
 
         const membership = await prisma.groupMember.findUnique({ where: { groupId_userId: { groupId: dto.groupId, userId } } });

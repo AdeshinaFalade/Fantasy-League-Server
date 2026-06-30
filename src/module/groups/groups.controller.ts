@@ -25,8 +25,8 @@ export class GroupsController {
 
     @Get()
     @ApiOkResponse()
-    list() {
-        return this.groupsService.list();
+    list(@Session() session: { user?: { id?: string } }) {
+        return this.groupsService.list(session.user?.id ?? '');
     }
 
     @Get(':id')

@@ -59,9 +59,39 @@ export class GroupsService {
         });
     }
 
-    async list() {
-        const prisma = this.prisma as never as { group: { findMany(args?: unknown): Promise<unknown[]> } };
-        return prisma.group.findMany();
+    async list(userId: string) {
+        const prisma = this.prisma as never as {
+            group: {
+                findMany(args?: unknown): Promise<any[]>;
+            };
+        };
+        const groups = await prisma.group.findMany({
+            where: {
+                members: {
+                    some: {
+                        userId,
+                    },
+                },
+            },
+            include: {
+                members: {
+                    where: {
+                        userId,
+                    },
+                    select: {
+                        role: true,
+                    },
+                },
+            },
+        });
+
+        return groups.map((g) => {
+            const { members, ...groupData } = g;
+            return {
+                ...groupData,
+                role: members?.[0]?.role ?? null,
+            };
+        });
     }
 
     async findOne(id: string) {

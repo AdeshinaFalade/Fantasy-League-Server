@@ -23,8 +23,14 @@ export class EventsService {
                 createdById: userId,
                 name: dto.name,
                 description: dto.description,
+                startsAt: new Date(dto.startsAt),
             },
         });
+    }
+
+    async findByGroup(groupId: string) {
+        const prisma = this.prisma as never as { event: { findMany(args: unknown): Promise<unknown[]> } };
+        return prisma.event.findMany({ where: { groupId } });
     }
 
     async findOne(id: string) {
