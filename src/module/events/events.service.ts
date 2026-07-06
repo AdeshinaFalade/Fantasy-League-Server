@@ -56,6 +56,17 @@ export class EventsService {
         return prisma.event.update({ where: { id }, data: { status } });
     }
 
+    async update(id: string, dto: { name?: string; description?: string; startsAt?: string; status?: string }) {
+        const prisma = this.prisma as never as { event: { update(args: unknown): Promise<unknown> } };
+        const data: any = {};
+        if (dto.name !== undefined) data.name = dto.name;
+        if (dto.description !== undefined) data.description = dto.description;
+        if (dto.startsAt !== undefined) data.startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
+        if (dto.status !== undefined) data.status = dto.status;
+
+        return prisma.event.update({ where: { id }, data });
+    }
+
     async recordResult(userId: string, dto: ResultEventDto) {
         return this.resultsService.recordResult(userId, dto);
     }

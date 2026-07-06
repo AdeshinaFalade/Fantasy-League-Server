@@ -21,6 +21,9 @@ describe('PredictionsService', () => {
             event: {
                 findUnique: jest.fn(),
             },
+            rule: {
+                findMany: jest.fn(),
+            },
         };
         kafkaMock = {
             publish: jest.fn(),
@@ -57,6 +60,7 @@ describe('PredictionsService', () => {
 
             prismaMock.event.findUnique.mockResolvedValue({ status: 'OPEN', startsAt: futureDate });
             prismaMock.groupMember.findUnique.mockResolvedValue({ id: 'member-123' });
+            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1' }]);
             
             const expectedPrediction = {
                 id: 'pred-123',
@@ -89,6 +93,7 @@ describe('PredictionsService', () => {
         it('should create prediction successfully if startsAt is not defined (null)', async () => {
             prismaMock.event.findUnique.mockResolvedValue({ status: 'OPEN', startsAt: null });
             prismaMock.groupMember.findUnique.mockResolvedValue({ id: 'member-123' });
+            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1' }]);
             
             const expectedPrediction = {
                 id: 'pred-123',

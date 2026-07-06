@@ -17,6 +17,9 @@ describe('EventsService', () => {
                 update: jest.fn(),
                 findMany: jest.fn(),
             },
+            groupMember: {
+                findUnique: jest.fn(),
+            },
         };
         resultsServiceMock = {
             recordResult: jest.fn(),
@@ -70,10 +73,12 @@ describe('EventsService', () => {
     describe('findByGroup', () => {
         it('should call prisma.event.findMany filtering by groupId', async () => {
             const groupId = 'group-123';
+            const userId = 'user-1';
             const expectedEvents = [{ id: 'event-1', groupId, name: 'Event 1' }];
+            prismaMock.groupMember.findUnique.mockResolvedValue({ userId, groupId });
             prismaMock.event.findMany.mockResolvedValue(expectedEvents);
 
-            const result = await service.findByGroup(groupId);
+            const result = await service.findByGroup(userId, groupId);
 
             expect(prismaMock.event.findMany).toHaveBeenCalledWith({
                 where: { groupId },

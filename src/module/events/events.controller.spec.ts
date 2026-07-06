@@ -39,9 +39,9 @@ describe('EventsController', () => {
             const expectedEvents = [{ id: 'event-1', groupId, name: 'Event 1' }];
             serviceMock.findByGroup.mockResolvedValue(expectedEvents);
 
-            const result = await controller.findByGroup(groupId);
+            const result = await controller.findByGroup({ user: { id: 'user-1' } }, groupId);
 
-            expect(serviceMock.findByGroup).toHaveBeenCalledWith(groupId);
+            expect(serviceMock.findByGroup).toHaveBeenCalledWith('user-1', groupId);
             expect(result).toEqual(expectedEvents);
         });
     });

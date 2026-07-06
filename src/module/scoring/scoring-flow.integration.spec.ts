@@ -131,9 +131,9 @@ describe('Event-Driven Execution Flow Integration Test', () => {
         // 5. Admin enters actual results
         // Actual result: Player X scored 15 points (which is GT 10)
         // This will write the result, transition event to SCORING, and trigger the event loop
-        const resultPayload = [
-            { player: 'Player X', metric: 'points', value: 15 },
-        ];
+        const resultPayload = {
+            'Player X': { points: 15 },
+        };
 
         await resultsService.recordResult(user.id, {
             eventId: event.id,

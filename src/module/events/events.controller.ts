@@ -39,6 +39,15 @@ export class EventsController {
         return this.eventsService.setStatus(id, dto.status);
     }
 
+    @Patch(':id')
+    @ApiOkResponse()
+    update(
+        @Param('id') id: string,
+        @Body() dto: { name?: string; description?: string; startsAt?: string; status?: string }
+    ) {
+        return this.eventsService.update(id, dto);
+    }
+
     @Post('result')
     @ApiOkResponse()
     recordResult(@Session() session: { user?: { id?: string } }, @Body() dto: ResultEventDto) {
