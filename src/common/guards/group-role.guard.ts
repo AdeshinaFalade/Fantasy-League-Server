@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { GroupRole } from '@prisma/client';
+import { AuthService as BetterAuthService } from '@thallesp/nestjs-better-auth';
 import { PrismaService } from '../../lib/database/prisma.service';
 import { REQUIRE_GROUP_ROLE_KEY } from '../decorators/group-role.decorator';
 
@@ -9,6 +10,7 @@ export class GroupRoleGuard implements CanActivate {
     constructor(
         private readonly reflector: Reflector,
         private readonly prisma: PrismaService,
+        private readonly authService: BetterAuthService,
     ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -23,7 +25,30 @@ export class GroupRoleGuard implements CanActivate {
         }
 
         const request = context.switchToHttp().getRequest();
-        const user = request.user;
+        let user = request.user;
+        if (!user) {
+            try {
+                const headers = new Headers();
+                for (const [key, value] of Object.entries(request.headers || {})) {
+                    if (value) {
+                        if (Array.isArray(value)) {
+                            value.forEach(v => headers.append(key, v));
+                        } else {
+                            headers.set(key, value as string);
+                        }
+                    }
+                }
+                const sessionContext = await this.authService.api.getSession({ headers });
+                if (sessionContext) {
+                    request.user = sessionContext.user;
+                    request.session = sessionContext.session;
+                    user = sessionContext.user;
+                }
+            } catch (err) {
+                console.error('Failed to parse session in GroupRoleGuard:', err);
+            }
+        }
+
         if (!user) {
             throw new UnauthorizedException('Authentication required');
         }
