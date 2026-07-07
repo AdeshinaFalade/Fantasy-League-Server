@@ -10,8 +10,34 @@ import { PrismaModule } from '../../lib/database/prisma.module';
 import { KafkaModule } from '../../lib/kafka/kafka.module';
 import { GroupRole } from '@prisma/client';
 import { config } from 'dotenv';
+import { AuthService } from '@thallesp/nestjs-better-auth';
+import { Global, Module } from '@nestjs/common';
 
 config({ path: '.env' });
+
+jest.mock('@thallesp/nestjs-better-auth', () => ({
+    AuthService: class {
+        api = {
+            getSession: jest.fn(),
+        };
+    },
+}));
+
+@Global()
+@Module({
+    providers: [
+        {
+            provide: AuthService,
+            useValue: {
+                api: {
+                    getSession: jest.fn(),
+                },
+            },
+        },
+    ],
+    exports: [AuthService],
+})
+class MockAuthModule {}
 
 describe('Event-Driven Execution Flow Integration Test', () => {
     let prisma: PrismaService;
@@ -25,6 +51,7 @@ describe('Event-Driven Execution Flow Integration Test', () => {
     beforeAll(async () => {
         moduleRef = await Test.createTestingModule({
             imports: [
+                MockAuthModule,
                 PrismaModule,
                 KafkaModule,
                 ResultsModule,

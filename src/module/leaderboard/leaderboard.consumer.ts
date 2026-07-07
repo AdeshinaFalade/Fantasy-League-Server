@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../lib/database/prisma.service';
 import { KafkaService } from '../../lib/kafka/kafka.service';
 import { KAFKA_TOPICS, ScoreComputedEvent } from '../../lib/kafka/kafka.constants';
+import { LeaderboardGateway } from './leaderboard.gateway';
 
 @Injectable()
 export class LeaderboardConsumer implements OnModuleInit {
@@ -10,6 +11,7 @@ export class LeaderboardConsumer implements OnModuleInit {
     constructor(
         private readonly prisma: PrismaService,
         private readonly kafka: KafkaService,
+        private readonly leaderboardGateway: LeaderboardGateway,
     ) {}
 
     onModuleInit() {
@@ -84,6 +86,9 @@ export class LeaderboardConsumer implements OnModuleInit {
                 computedAt: leaderboard.computedAt || new Date(),
             }
         );
+
+        // 6. Broadcast update via WebSockets
+        this.leaderboardGateway.emitLeaderboardUpdate(groupId, leaderboard);
 
         this.logger.log(`Leaderboard updated for group ID: ${groupId} with ${rankings.length} rankings`);
     }

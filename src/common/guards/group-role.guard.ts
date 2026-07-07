@@ -14,6 +14,11 @@ export class GroupRoleGuard implements CanActivate {
     ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
+        // Only apply guard to HTTP requests
+        if (context.getType() !== 'http') {
+            return true;
+        }
+
         const requiredRole = this.reflector.getAllAndOverride<GroupRole>(
             REQUIRE_GROUP_ROLE_KEY,
             [context.getHandler(), context.getClass()],
