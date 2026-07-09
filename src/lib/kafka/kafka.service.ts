@@ -18,10 +18,34 @@ export class KafkaService implements OnModuleInit, OnApplicationBootstrap, OnMod
     // Phase 1: callbacks registered by each consumer during module init
     private readonly pendingSubscriptions = new Map<string, ((payload: any) => Promise<void>)[]>();
 
-    private readonly kafka = new Kafka({
-        clientId: process.env.KAFKA_CLIENT_ID ?? 'fantasy-league',
-        brokers: (process.env.KAFKA_BROKERS ?? 'localhost:9092').split(','),
-    });
+    private readonly kafka: Kafka;
+
+    constructor() {
+        const brokersStr = process.env.KAFKA_BROKERS ?? process.env.KAFKA_URL ?? 'localhost:9092';
+        const brokers = brokersStr.split(',').map((b) => b.replace('kafka+ssl://', ''));
+        const clientId = process.env.KAFKA_CLIENT_ID ?? 'fantasy-league';
+
+        const config: any = {
+            clientId,
+            brokers,
+        };
+
+        const hasSsl =
+            process.env.KAFKA_TRUSTED_CERT &&
+            process.env.KAFKA_CLIENT_CERT &&
+            process.env.KAFKA_CLIENT_CERT_KEY;
+
+        if (hasSsl) {
+            config.ssl = {
+                rejectUnauthorized: false,
+                ca: [process.env.KAFKA_TRUSTED_CERT],
+                key: process.env.KAFKA_CLIENT_CERT_KEY,
+                cert: process.env.KAFKA_CLIENT_CERT,
+            };
+        }
+
+        this.kafka = new Kafka(config);
+    }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -44,7 +68,9 @@ export class KafkaService implements OnModuleInit, OnApplicationBootstrap, OnMod
         // Ensure every topic exists before subscribing
         await this.ensureTopicsExist(topics);
 
-        this.consumer = this.kafka.consumer({ groupId: 'fantasy-league-group' });
+        const prefix = process.env.KAFKA_PREFIX ?? '';
+        const groupId = `${prefix}fantasy-league-group`;
+        this.consumer = this.kafka.consumer({ groupId });
         await this.consumer.connect();
 
         // Subscribe to ALL topics in one call — consumer is not yet running
@@ -82,8 +108,9 @@ export class KafkaService implements OnModuleInit, OnApplicationBootstrap, OnMod
             this.logger.warn(`Kafka is disabled. Cannot publish to topic: ${topic}`);
             return;
         }
+        const prefixedTopic = this.prefixTopic(topic);
         await this.producer.send({
-            topic,
+            topic: prefixedTopic,
             messages: [{ key, value: JSON.stringify(value) }],
         });
     }
@@ -97,32 +124,51 @@ export class KafkaService implements OnModuleInit, OnApplicationBootstrap, OnMod
             this.logger.warn(`Kafka is disabled. Skipping subscription to topic: ${topic}`);
             return;
         }
-        if (!this.pendingSubscriptions.has(topic)) {
-            this.pendingSubscriptions.set(topic, []);
+        const prefixedTopic = this.prefixTopic(topic);
+        if (!this.pendingSubscriptions.has(prefixedTopic)) {
+            this.pendingSubscriptions.set(prefixedTopic, []);
         }
-        this.pendingSubscriptions.get(topic)!.push(callback);
-        this.logger.log(`Registered handler for topic: ${topic}`);
+        this.pendingSubscriptions.get(prefixedTopic)!.push(callback);
+        this.logger.log(`Registered handler for topic: ${prefixedTopic}`);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private prefixTopic(topic: string): string {
+        const prefix = process.env.KAFKA_PREFIX ?? '';
+        return `${prefix}${topic}`;
+    }
 
     private async ensureTopicsExist(topics: string[]): Promise<void> {
         if (!this.admin) {
             this.admin = this.kafka.admin();
             await this.admin.connect();
         }
-        const existing = await this.admin.listTopics();
-        const missing = topics.filter((t) => !existing.includes(t));
-        if (missing.length > 0) {
-            await this.admin.createTopics({
-                topics: missing.map((topic) => ({
-                    topic,
-                    numPartitions: 1,
-                    replicationFactor: 1,
-                })),
-                waitForLeaders: true,
-            });
-            this.logger.log(`Created Kafka topics: ${missing.join(', ')}`);
+        try {
+            const existing = await this.admin.listTopics();
+            const missing = topics.filter((t) => !existing.includes(t));
+            if (missing.length > 0) {
+                const defaultReplication = process.env.KAFKA_TRUSTED_CERT ? 3 : 1;
+                const replicationFactor = process.env.KAFKA_REPLICATION_FACTOR
+                    ? parseInt(process.env.KAFKA_REPLICATION_FACTOR)
+                    : defaultReplication;
+
+                try {
+                    await this.admin.createTopics({
+                        topics: missing.map((topic) => ({
+                            topic,
+                            numPartitions: 1,
+                            replicationFactor,
+                        })),
+                        waitForLeaders: true,
+                    });
+                    this.logger.log(`Created Kafka topics: ${missing.join(', ')}`);
+                } catch (createErr) {
+                    this.logger.warn(`Failed to create missing topics [${missing.join(', ')}] via Admin API: ${createErr}. Ensure they are pre-created.`);
+                }
+            }
+        } catch (err) {
+            this.logger.warn(`Failed to list or create topics via Admin API: ${err}. Continuing connection anyway.`);
         }
     }
 }
