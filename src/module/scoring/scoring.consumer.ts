@@ -81,8 +81,9 @@ export class ScoringConsumer implements OnModuleInit {
                 const ruleId = selection.ruleId;
                 const match = ruleBreakdown.find((item) => item.rule.id === ruleId);
 
-                // If user prediction matches the actual condition status, add points
-                if (match && selection.value === match.matched) {
+                // Only a committed "Yes" (value: true) that also matches the actual
+                // condition earns points. Skipped rules and wrong calls both earn 0.
+                if (match && selection.value === true && match.matched === true) {
                     totalUserScore += match.rule.score;
                 }
             }

@@ -60,7 +60,7 @@ describe('PredictionsService', () => {
 
             prismaMock.event.findUnique.mockResolvedValue({ status: 'OPEN', startsAt: futureDate });
             prismaMock.groupMember.findUnique.mockResolvedValue({ id: 'member-123' });
-            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1' }]);
+            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1', player: 'Player A', metric: 'goals' }]);
             
             const expectedPrediction = {
                 id: 'pred-123',
@@ -93,7 +93,7 @@ describe('PredictionsService', () => {
         it('should create prediction successfully if startsAt is not defined (null)', async () => {
             prismaMock.event.findUnique.mockResolvedValue({ status: 'OPEN', startsAt: null });
             prismaMock.groupMember.findUnique.mockResolvedValue({ id: 'member-123' });
-            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1' }]);
+            prismaMock.rule.findMany.mockResolvedValue([{ id: 'rule-1', player: 'Player A', metric: 'goals' }]);
             
             const expectedPrediction = {
                 id: 'pred-123',
@@ -109,6 +109,79 @@ describe('PredictionsService', () => {
 
             expect(result).toEqual(expectedPrediction);
             expect(prismaMock.prediction.create).toHaveBeenCalled();
+        });
+    });
+
+    describe('contradictory prediction guard', () => {
+        const userId = 'user-123';
+
+        beforeEach(() => {
+            prismaMock.event.findUnique.mockResolvedValue({ status: 'OPEN', startsAt: null });
+            prismaMock.groupMember.findUnique.mockResolvedValue({ id: 'member-123' });
+        });
+
+        it('should reject when two Yes selections share the same player+metric', async () => {
+            // Both rules are for Messi's goals — GT 0.5 and LT 0.5 — classic hedge
+            prismaMock.rule.findMany.mockResolvedValue([
+                { id: 'rule-gt', player: 'Messi', metric: 'goals' },
+                { id: 'rule-lt', player: 'Messi', metric: 'goals' },
+            ]);
+
+            const dto: CreatePredictionDto = {
+                eventId: 'event-123',
+                groupId: 'group-123',
+                selections: [
+                    { ruleId: 'rule-gt', value: true },
+                    { ruleId: 'rule-lt', value: true },
+                ],
+            };
+
+            await expect(service.create(userId, dto)).rejects.toThrow(
+                'Contradictory prediction',
+            );
+            expect(prismaMock.prediction.create).not.toHaveBeenCalled();
+        });
+
+        it('should allow Yes picks on different metrics for the same player', async () => {
+            prismaMock.rule.findMany.mockResolvedValue([
+                { id: 'rule-goals', player: 'Messi', metric: 'goals' },
+                { id: 'rule-assists', player: 'Messi', metric: 'assists' },
+            ]);
+
+            const expectedPrediction = { id: 'pred-456', selections: [] };
+            prismaMock.prediction.create.mockResolvedValue(expectedPrediction);
+
+            const dto: CreatePredictionDto = {
+                eventId: 'event-123',
+                groupId: 'group-123',
+                selections: [
+                    { ruleId: 'rule-goals', value: true },
+                    { ruleId: 'rule-assists', value: true },
+                ],
+            };
+
+            await expect(service.create(userId, dto)).resolves.toEqual(expectedPrediction);
+        });
+
+        it('should allow Yes picks on the same metric for different players', async () => {
+            prismaMock.rule.findMany.mockResolvedValue([
+                { id: 'rule-messi', player: 'Messi', metric: 'goals' },
+                { id: 'rule-ronaldo', player: 'Ronaldo', metric: 'goals' },
+            ]);
+
+            const expectedPrediction = { id: 'pred-789', selections: [] };
+            prismaMock.prediction.create.mockResolvedValue(expectedPrediction);
+
+            const dto: CreatePredictionDto = {
+                eventId: 'event-123',
+                groupId: 'group-123',
+                selections: [
+                    { ruleId: 'rule-messi', value: true },
+                    { ruleId: 'rule-ronaldo', value: true },
+                ],
+            };
+
+            await expect(service.create(userId, dto)).resolves.toEqual(expectedPrediction);
         });
     });
 });

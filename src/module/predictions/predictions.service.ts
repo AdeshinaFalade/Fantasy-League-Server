@@ -32,10 +32,9 @@ export class PredictionsService {
             throw new ForbiddenException('User does not belong to the group');
         }
 
-        // Validate that all ruleIds belong to this event
         const rules = await (this.prisma as any).rule.findMany({
             where: { eventId: dto.eventId },
-            select: { id: true },
+            select: { id: true, player: true, metric: true },
         });
         const validRuleIds = new Set<string>(rules.map((r: { id: string }) => r.id));
         const invalidIds = dto.selections
@@ -46,6 +45,27 @@ export class PredictionsService {
                 `Invalid ruleId(s) for this event: ${invalidIds.join(', ')}`,
             );
         }
+
+        // Prevent contradictory picks: a user must not select Yes on two or more
+        // rules that share the same player+metric (e.g. Messi Goals GT 0.5 AND
+        // Messi Goals LT 0.5). That is hedging — one of them is guaranteed to win.
+        const ruleMap = new Map<string, { player: string; metric: string }>(
+            rules.map((r: { id: string; player: string; metric: string }) => [r.id, r]),
+        );
+        const yesSelections = dto.selections.filter((s) => s.value === true);
+        const seenPlayerMetric = new Set<string>();
+        for (const sel of yesSelections) {
+            const rule = ruleMap.get(sel.ruleId);
+            if (!rule) continue;
+            const key = `${rule.player}::${rule.metric}`;
+            if (seenPlayerMetric.has(key)) {
+                throw new BadRequestException(
+                    `Contradictory prediction: you cannot select Yes on multiple rules for the same player+metric (${rule.player} — ${rule.metric}). Pick at most one.`,
+                );
+            }
+            seenPlayerMetric.add(key);
+        }
+
 
         const prediction = await prisma.prediction.create({
             data: {
