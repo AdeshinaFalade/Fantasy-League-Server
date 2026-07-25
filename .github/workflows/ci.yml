@@ -15,7 +15,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: fantasy_league_test
         ports:
           - 5432:5432
@@ -26,7 +26,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fantasy_league_test
+      DATABASE_URL: postgresql://postgres@localhost:5432/fantasy_league_test
       NODE_ENV: test
 
     steps:
