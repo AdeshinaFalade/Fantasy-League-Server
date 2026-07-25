@@ -1,4 +1,3 @@
-◇ injected env (8) from .env // tip: ⌁ auth for agents [www.vestauth.com]
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
